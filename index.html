@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-title" content="Delivora">
+<meta name="theme-color" content="#244b93">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Delivora Logistics</title>
+<style>
+:root{--ink:#244b93;--bg:#eef2f1;--card:#fff;--line:#d3dcdb;--sig:#ff914d;--s0:#5d7287;--s1:#b86e00;--s2:#1f8a5b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{background:var(--ink);color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 14px 0;position:sticky;top:0;z-index:5}
+.top{display:flex;justify-content:space-between;align-items:center}
+h1{font-size:19px;margin:0}
+.sync{font-size:13px;padding:3px 10px;border-radius:99px;background:#ffffff22}
+.sync.live{background:var(--s2)}.sync.pend{background:var(--s1)}.sync.off{background:#a33}
+nav{display:flex;gap:4px;margin-top:10px;overflow-x:auto}
+nav button{flex:1;min-width:max-content;border:0;background:none;color:#cfd9e3;padding:10px 12px;font:inherit;border-bottom:3px solid transparent}
+nav button.on{color:#fff;border-color:var(--sig);font-weight:600}
+main{padding:14px;max-width:760px;margin:0 auto}
+h2{font-size:17px;margin:18px 0 8px}
+.card,form,.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card p{margin:6px 0 2px}.card small{color:#4b6073;margin-right:12px}
+.chip{font-size:13px;font-weight:600;color:#fff;padding:2px 10px;border-radius:99px}
+.s0{background:var(--s0)}.s1{background:var(--s1)}.s2{background:var(--s2)}
+.wait{font-size:12px;color:var(--s1)}
+label{display:block;font-size:14px;margin-bottom:8px}
+input{width:100%;padding:10px;font:inherit;border:1px solid #9fb0b0;border-radius:6px;margin-top:3px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{font:inherit;cursor:pointer}
+.go{background:var(--ink);color:#fff;border:0;border-radius:6px;padding:11px 14px;margin-top:8px;font-weight:600}
+.ghost{background:none;border:1px solid var(--ink);color:var(--ink);border-radius:6px;padding:10px 14px;margin-top:8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stats div{background:var(--ink);color:#fff;border-radius:8px;padding:10px}
+.stats b{display:block;font-size:26px}
+.stats span{font-size:12px;color:#b9c7d4}
+.open{cursor:pointer}
+.tl{list-style:none;margin:10px 0 0;padding:0 0 0 14px;border-left:3px solid var(--line)}
+.tl li{margin-bottom:10px;color:#6b7c8b}.tl li.done{color:var(--ink);border-left:3px solid var(--s2);margin-left:-17px;padding-left:14px}
+.tl img{display:block;height:60px;background:#fff;border:1px solid var(--line);border-radius:4px;margin-top:4px}
+.banner{background:#fff3cd;border:1px solid var(--sig);border-radius:8px;padding:12px;margin-bottom:10px}
+#sheet{position:fixed;inset:0;background:#12263acc;display:flex;align-items:flex-end;justify-content:center;z-index:10}
+#sheet[hidden]{display:none}
+.panel{width:100%;max-width:560px;margin:0;border-radius:14px 14px 0 0;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+canvas{width:100%;height:160px;background:#fff;border:2px dashed #9fb0b0;border-radius:6px;touch-action:none;display:block}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;max-width:90%}
+#toast.show{opacity:1}
+</style></head>
+<body>
+<header><div class="top"><h1>Delivora Logistics</h1><span id="sync" class="sync">Starting</span></div><nav id="tabs"></nav></header>
+<main id="app"></main>
+<div id="sheet" hidden></div>
+<div id="toast" role="status"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ===== STEP 1: paste your Firebase config here (Project settings > Your apps > firebaseConfig) ===== */
+const firebaseConfig={
+  apiKey:"AIzaSyCiAYQh_-IqqSg7FmBjAJx_-ixNAz7hlJc",
+  authDomain:"delivora-dbab3.firebaseapp.com",
+  projectId:"delivora-dbab3",
+  storageBucket:"delivora-dbab3.firebasestorage.app",
+  messagingSenderId:"158254979732",
+  appId:"1:158254979732:web:d36aded0582eecd12c7281"
+};
+/* ================================================================================================= */
+
+const ROLES={warehouse:"Warehouse",boat:"Boat master",ship:"Ship",office:"Office"};
+const STEPS=["Dispatched","On Boat","Delivered to Ship"];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=i=>i?new Date(i).toLocaleString([],{dateStyle:"medium",timeStyle:"short"}):"";
+const toast=m=>{const t=$("#toast");t.textContent=m;t.className="show";setTimeout(()=>t.className="",3200)};
+const chip=s=>`<span class="chip s${STEPS.indexOf(s)}">${esc(s)}</span>`;
+
+let role=localStorage.getItem("role")||"warehouse",notes=[],db=null,openId=null;
+const ok=typeof firebase!=="undefined"&&!firebaseConfig.apiKey.startsWith("PASTE");
+if(ok){
+  firebase.initializeApp(firebaseConfig);
+  db=firebase.firestore();
+  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});   // offline cache + auto sync
+  db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot({includeMetadataChanges:true},
+    s=>{notes=s.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites}));render()},
+    e=>toast("Database error: "+e.code));
+}
+const put=(id,data)=>db.collection("deliveryNotes").doc(id).set(data).catch(e=>toast(e.message));
+
+const card=(n,extra="")=>`<article class="card"><div class="row"><b>${esc(n.id)}</b>${chip(n.status)}${n.pending?'<i class="wait">waiting to sync</i>':""}</div>
+<p>${esc(n.description)}</p><small>AWB ${esc(n.awb)}</small><small>${esc(n.qty)} cartons, ${esc(n.weight)} kg</small><small>${fmt(n.createdAt)}</small>${n.docStatus?"<small>Document: "+esc(n.docStatus)+"</small>":""}${extra}</article>`;
+
+const timeline=n=>`<ol class="tl">
+<li class="done"><b>Dispatched</b><br>${fmt(n.createdAt)}<br><small>Warehouse</small></li>
+<li class="${n.boatAt?"done":""}"><b>On boat</b><br>${n.boatAt?fmt(n.boatAt)+"<br><small>Signed by "+esc(n.boatName)+"</small><img alt='Boat master signature' src='"+esc(n.boatSig)+"'>":"Waiting for boat master"}</li>
+<li class="${n.shipAt?"done":""}"><b>Delivered to ship</b><br>${n.shipAt?fmt(n.shipAt)+"<br><small>Signed by "+esc(n.shipName)+"</small><img alt='Ship personnel signature' src='"+esc(n.shipSig)+"'>":"Waiting for ship personnel"}</li>
+<li class="${n.officeAt?"done":""}"><b>Office record</b><br>${n.officeAt?fmt(n.officeAt)+"<br><small>Confirmed by "+esc(n.officeName)+"</small>":"Waiting for office to confirm"}</li></ol>`;
+
+const queue=stage=>{
+  const list=notes.filter(n=>n.status===(stage==="boat"?"Dispatched":"On Boat"));
+  const label=stage==="boat"?"Sign: loaded on boat":"Sign: received on ship";
+  return `<h2>${list.length?"Waiting for you ("+list.length+")":"Nothing waiting. New notes appear here by themselves."}</h2>`+
+    list.map(n=>card(n,`<button class="go" data-sign="${esc(n.id)}" data-stage="${stage}">${label}</button>`)).join("");
+};
+
+const views={
+  warehouse:()=>`<h2>All delivery notes</h2>`+notes.map(n=>card(n)).join("")||"",
+  boat:()=>queue("boat"),
+  ship:()=>queue("ship"),
+  office:()=>{
+    const q=notes.reduce((a,n)=>a+(+n.qty||0),0),w=notes.reduce((a,n)=>a+(+n.weight||0),0),c=s=>notes.filter(n=>n.status===s).length;
+    const act=n=>n.status==="Delivered to Ship"&&!n.officeAt?`<button class="go" data-office="${esc(n.id)}">Confirm office record</button>`:n.officeAt?"<small>Office record complete</small>":"";
+    return `<div class="stats"><div><b>${notes.length}</b><span>Delivery notes</span></div><div><b>${q}</b><span>Cartons</span></div><div><b>${w}</b><span>Weight (kg)</span></div></div>
+    <div class="stats" style="margin-top:8px"><div><b>${c("Dispatched")}</b><span>Dispatched</span></div><div><b>${c("On Boat")}</b><span>On boat (in transit)</span></div><div><b>${c("Delivered to Ship")}</b><span>Delivered to ship</span></div></div>
+    <h2>Live status (tap a note for its history)</h2>`+notes.map(n=>card(n,act(n)+(openId===n.id?timeline(n):"")).replace("<article class=\"card\"",`<article class="card open" data-open="${esc(n.id)}"`)).join("");
+  }
+};
+
+function render(){
+  $("#tabs").innerHTML=Object.entries(ROLES).map(([k,v])=>`<button data-role="${k}" class="${k===role?"on":""}">${v}</button>`).join("");
+  const off=!navigator.onLine,pend=notes.some(n=>n.pending),s=$("#sync");
+  s.textContent=off?"Offline":pend?"Syncing":"Live";s.className="sync "+(off?"off":pend?"pend":"live");
+  const l=$("#list");if(l)l.innerHTML=notes.length||role!=="warehouse"?views[role]():"<h2>No delivery notes yet</h2>";
+}
+function shell(){
+  const banner=ok?"":`<div class="banner"><b>Firebase is not connected yet.</b> Paste your firebaseConfig into index.html (top of the script), then reload.</div>`;
+  const form=role==="warehouse"?`<form id="f"><h2 style="margin-top:0">Dispatch new spares</h2>
+  <label>Spares / store description<input name="desc" required></label>
+  <div class="two"><label>Airway bill (AWB)<input name="awb" required></label><label>Delivery note no.<input name="dn" placeholder="DN-004" required></label></div>
+  <div class="two"><label>Quantity (cartons)<input name="qty" type="number" min="1" required></label><label>Weight (kg)<input name="wt" type="number" min="0" step="any" required></label></div>
+  <label>Custom document status (optional)<input name="doc" placeholder="e.g. Paper copy attached"></label>
+  <button class="go" type="submit">Dispatch</button> <button class="ghost" type="button" id="seed">Load 3 sample notes</button></form>`:"";
+  $("#app").innerHTML=banner+form+'<div id="list"></div>';
+  if(form)$("#f").onsubmit=addNote;
+  render();
+}
+function addNote(e){
+  e.preventDefault();if(!db)return toast("Connect Firebase first");
+  const f=e.target,v=n=>f[n].value.trim(),id=v("dn").toUpperCase();
+  if(notes.some(n=>n.id===id))return toast(id+" already exists");
+  put(id,{description:v("desc"),awb:v("awb"),qty:+v("qty"),weight:+v("wt"),docStatus:v("doc"),status:"Dispatched",createdAt:new Date().toISOString()});
+  f.reset();toast(id+" dispatched");
+}
+function seed(){
+  if(!db)return toast("Connect Firebase first");
+  [["DN-001","Cotton bedsheet sets (Kingsize)","176-98767854",10,12],["DN-002","Duvet Cover sets","176-65745687",15,10],["DN-003","Cushion covers","176-12345678",35,15]]
+  .forEach(([id,description,awb,qty,weight],i)=>{if(!notes.some(n=>n.id===id))put(id,{description,awb,qty,weight,status:"Dispatched",createdAt:new Date(Date.now()+i).toISOString()})});
+  toast("Sample notes added");
+}
+function openSign(id,stage){
+  const n=notes.find(x=>x.id===id);if(!n)return;
+  const sh=$("#sheet");sh.hidden=false;
+  sh.innerHTML=`<div class="panel"><h2 style="margin-top:0">${esc(id)}</h2><p>${esc(n.description)}, ${esc(n.qty)} cartons</p>
+  <label>Your name<input id="sname" autocomplete="name"></label>
+  <canvas id="pad" width="600" height="240" aria-label="Signature area"></canvas>
+  <div class="row"><button class="ghost" id="clr">Clear</button><button class="ghost" id="cancel">Cancel</button><button class="go" id="ok">Confirm</button></div></div>`;
+  const c=$("#pad"),x=c.getContext("2d");x.lineWidth=4;x.lineCap="round";x.lineJoin="round";x.strokeStyle="#244b93";
+  let down=false,drawn=false;
+  const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
+  c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);const[a,b]=pt(e);x.beginPath();x.moveTo(a,b)};
+  c.onpointermove=e=>{if(!down)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke();drawn=true};
+  c.onpointerup=c.onpointercancel=()=>down=false;
+  $("#clr").onclick=()=>{x.clearRect(0,0,c.width,c.height);drawn=false};
+  $("#cancel").onclick=()=>sh.hidden=true;
+  $("#ok").onclick=()=>{
+    const name=$("#sname").value.trim();
+    if(!name)return toast("Enter your name");
+    if(!drawn)return toast("Please sign in the box");
+    const now=new Date().toISOString(),sig=c.toDataURL("image/png");
+    const data=stage==="boat"?{status:"On Boat",boatName:name,boatSig:sig,boatAt:now}:{status:"Delivered to Ship",shipName:name,shipSig:sig,shipAt:now};
+    db.collection("deliveryNotes").doc(id).update(data).catch(e=>toast(e.message));
+    sh.hidden=true;
+    toast(navigator.onLine?"Saved":"Saved on this phone. It will sync when signal returns.");
+  };
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-role],[data-sign],[data-open],[data-office],#seed");if(!t)return;
+  if(t.dataset.role){role=t.dataset.role;localStorage.setItem("role",role);shell()}
+  else if(t.dataset.sign)openSign(t.dataset.sign,t.dataset.stage);
+  else if(t.dataset.open){openId=openId===t.dataset.open?null:t.dataset.open;render()}
+  else if(t.dataset.office){const nm=prompt("Your name (office staff)");if(nm&&nm.trim())db.collection("deliveryNotes").doc(t.dataset.office).update({officeAt:new Date().toISOString(),officeName:nm.trim()}).catch(e=>toast(e.message))}
+  else if(t.id==="seed")seed();
+});
+addEventListener("online",render);addEventListener("offline",render);
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+shell();
+</script></body></html>
