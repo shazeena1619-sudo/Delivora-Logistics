@@ -184,6 +184,8 @@ document.addEventListener("click",e=>{
   else if(t.id==="seed")seed();
 });
 addEventListener("online",render);addEventListener("offline",render);
-if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").then(()=>navigator.serviceWorker.ready)
+  .then(()=>caches.match("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"))
+  .then(r=>{if(r&&!localStorage.getItem("offlineReady")){localStorage.setItem("offlineReady","1");toast("Ready to work offline")}}).catch(()=>{});
 shell();
 </script></body></html>
