@@ -74,17 +74,39 @@ const STEPS=["Dispatched","On Boat","Delivered to Ship"];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=i=>i?new Date(i).toLocaleString([],{dateStyle:"medium",timeStyle:"short"}):"";
-const toast=m=>{const t=$("#toast");t.textContent=m;t.className="show";setTimeout(()=>t.className="",3200)};
+const toast=(m,ms=3200)=>{const t=$("#toast");t.textContent=m;t.className="show";clearTimeout(toast.t);toast.t=setTimeout(()=>t.className="",ms)};
 const chip=s=>`<span class="chip s${STEPS.indexOf(s)}">${esc(s)}</span>`;
 
-let role=localStorage.getItem("role")||"warehouse",notes=[],db=null,openId=null;
+let role=localStorage.getItem("role")||"warehouse",notes=[],db=null,openId=null,prev={},loaded=false,feed=[];
 const ok=typeof firebase!=="undefined"&&!firebaseConfig.apiKey.startsWith("PASTE");
 if(ok){
   firebase.initializeApp(firebaseConfig);
   db=firebase.firestore();
   db.enablePersistence({synchronizeTabs:true}).catch(()=>{});   // offline cache + auto sync
   db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot({includeMetadataChanges:true},
-    s=>{notes=s.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites}));render()},
+    s=>{
+      notes=s.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites}));
+      if(!s.metadata.fromCache){
+        const msgs=[];
+        notes.forEach(n=>{
+          const p=prev[n.id];
+          if(loaded&&!n.pending){
+            if(!p)msgs.push(n.id+" dispatched from warehouse");
+            else if(n.status!==p.s)msgs.push(n.status==="On Boat"?n.id+" is now on boat"+(n.boatName?" (signed by "+n.boatName+")":""):n.id+" delivered to ship"+(n.shipName?" (signed by "+n.shipName+")":""));
+            else if(n.officeAt&&!p.o)msgs.push(n.id+": office record confirmed");
+          }
+          prev[n.id]={s:n.status,o:!!n.officeAt};
+        });
+        loaded=true;
+        if(msgs.length){
+          const t=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+          msgs.forEach(m=>feed.unshift({t,m}));feed=feed.slice(0,6);
+          toast(msgs.join(". "),6000);
+          if(navigator.vibrate)navigator.vibrate(200);
+        }
+      }
+      render();
+    },
     e=>toast("Database error: "+e.code));
 }
 const put=(id,data)=>db.collection("deliveryNotes").doc(id).set(data).catch(e=>toast(e.message));
@@ -114,6 +136,7 @@ const views={
     const act=n=>n.status==="Delivered to Ship"&&!n.officeAt?`<button class="go" data-office="${esc(n.id)}">Confirm office record</button>`:n.officeAt?"<small>Office record complete</small>":"";
     return `<div class="stats"><div><b>${notes.length}</b><span>Delivery notes</span></div><div><b>${q}</b><span>Cartons</span></div><div><b>${w}</b><span>Weight (kg)</span></div></div>
     <div class="stats" style="margin-top:8px"><div><b>${c("Dispatched")}</b><span>Dispatched</span></div><div><b>${c("On Boat")}</b><span>On boat (in transit)</span></div><div><b>${c("Delivered to Ship")}</b><span>Delivered to ship</span></div></div>
+    ${feed.length?"<h2>Recent updates</h2>"+feed.map(f=>`<div class="card"><small>${esc(f.t)}</small>${esc(f.m)}</div>`).join(""):""}
     <h2>Live status (tap a note for its history)</h2>`+notes.map(n=>card(n,act(n)+(openId===n.id?timeline(n):"")).replace("<article class=\"card\"",`<article class="card open" data-open="${esc(n.id)}"`)).join("");
   }
 };

@@ -1,4 +1,4 @@
-const C="delivora-v5";
+const C="delivora-v6";
 const SDK=["https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js","https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"];
 const LOCAL=["./","index.html","manifest.json","icon.svg","icon-192.png","icon-512.png","apple-touch-icon.png"];
 
